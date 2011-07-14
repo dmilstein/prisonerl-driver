@@ -1,0 +1,27 @@
+-*-outline-*-
+
+* Better total/results from Driver
+** Collect histories for each player
+*** Points scored against opponent
+*** Actual games against opponent
+** Print those histories
+** Clean up formatting
+
+Winner:
+ Darcy: 320 points
+
+Pushover:
+ Total Points: 230
+  
+ vs. Psycho: 40 points (90 points) 
+ [cd, dd, cc, ..]
+
+ vs. Darcy: 80 points (80 points)
+ [cc, cc, cc ...]
+
+** Random # of games
+
+* Write a sample module
+** Write eunit tests for it
+** installed faxien
+** ran faxien install-app eunit (2.1.7)
