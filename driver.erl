@@ -14,6 +14,13 @@
 -record(player,
         {name, process, score=0, history=[]}).
 
+% series result -- result of a series of a games against a single opponent
+% choices is a list of tuples {cooperate|defect, cooperate|defect}, where
+% the first elt is own choice, second elt is opponent choice.
+-record(sresult, 
+        { self, opponent, own_points=0, opponent_points=0, choices=[]}).
+                     
+
 create_players() ->
     Players = [ {"pushover", pushover},
                 {"psycho", psycho},
@@ -30,35 +37,81 @@ run_tournament() ->
     N = 10,
     Players = create_players(),
     AllPairs = all_pairs(Players),
-    AllScores = lists:map(
+    AllSResults = lists:flatten(lists:map(
       fun({Player1, Player2}) ->
-              {Score1, Score2} = run_games(N, Player1, Player2),
-              [{Player1, Score1}, {Player2, Score2}]
+              { SR1, SR2 } = run_games(N, Player1, Player2),
+              [ SR1, SR2 ]
       end,
-      AllPairs),
+      AllPairs)),
     lists:map(fun stop_player/1, Players),
-    AllScores1 = lists:flatten(AllScores),
-    lists:foreach(fun({Player, Score}) ->
-                          io:format("~s: ~w points~n", [Player#player.name,
-                                                        Score]) 
-                  end,
-                  AllScores1),
-    ScoresByPlayer = 
-        lists:foldl(
-          fun({Player, Score}, Dict) ->
-                  dict:update(Player,
-                              fun(TotalScore) -> TotalScore + Score end,
-                              Score,
-                              Dict)
-          end,
-          dict:new(),
-          AllScores1),
-    ScoresList = dict:to_list(ScoresByPlayer),
-    Sorted = lists:reverse(lists:keysort(2, ScoresList)),
-    [{Winner, Score} | _Rest] = Sorted,
-    io:format("Winner: ~s (~p points)~n~n", [Winner#player.name, Score]),
-    io:format("~p ~n", [Sorted]),
+    SResultsByPlayer = collect_by_player(AllSResults),
+    output_scores(SResultsByPlayer),
     ok.
+
+%% Take a list of Series Results (sresult records), where each player will
+%% exist more than once in the list, return a list of { Player, [All
+%% Series Results for that Player ] } tuples
+collect_by_player(AllSResults) ->
+    dict:to_list(
+      lists:foldl(
+        fun(SResult, Dict) ->
+                #sresult{self=Player} = SResult,
+                dict:update(Player,
+                            fun(SResults) -> [SResult | SResults] end,
+                            [SResult],
+                            Dict)
+        end,
+        dict:new(),
+        AllSResults)).
+    
+
+%% Take a list of { Player, [SResults] } tuples, generate output
+output_scores(SResultsByPlayer) ->
+    WithTotalPoints = 
+        lists:map(fun({Player, SResults}) ->
+                          {Player, 
+                           SResults, 
+                           lists:foldl(
+                             fun(SResult, TotalPoints) ->
+                                     TotalPoints + SResult#sresult.own_points
+                             end,
+                             0,
+                             SResults)}
+                  end,
+                 SResultsByPlayer),
+    Sorted = lists:reverse(lists:keysort(3, WithTotalPoints)),
+    [{Winner, _SResults, Score} | _Rest] = Sorted,
+    io:format("Winner:~n ~s (~p points)~n", [Winner#player.name, Score]),
+    lists:foreach(
+      fun({Player, SResults, TotalScore}) ->
+              io:format("~n~s:~n", [Player#player.name]),
+              io:format(" Total Points: ~p~n~n", [TotalScore]),
+              lists:foreach(
+                fun(SResult) ->
+                        #sresult{opponent=Opp,
+                                 own_points=OwnPts,
+                                 opponent_points=OppPts,
+                                 choices=Choices} =
+                            SResult,
+                        io:format(" vs. ~s: ~p points (~p points)~n",
+                                  [ Opp#player.name, OwnPts, OppPts ]),
+                        io:format(" [~s]~n~n", 
+                                  [string:join(
+                                     lists:map(fun format_choice/1, Choices),
+                                     ",")])
+                end,
+                SResults)
+      end,
+      Sorted),
+    ok.
+
+format_choice({Own, Opp}) ->
+    string:concat(short_str(Own), short_str(Opp)).
+
+short_str(cooperate) ->
+    "c";
+short_str(defect) ->
+    "d".
 
 all_pairs(Lst) ->
     all_pairs(Lst, []).
@@ -69,19 +122,42 @@ all_pairs([H|T], Lst) ->
     SomePairs = lists:map(fun(Elt) -> {H, Elt} end, T),
     all_pairs(T, lists:append(Lst, SomePairs)).
     
-%% Run N games between two players, returning a tuple of total points for each:
+%% Run N games between two players, returning a series result (sresult)
+%% record for each:
 %%
-%% { PointsFor1, PointsFor2 }
+%% { Player1SResult, Player2SResult }
 run_games(N, Player1, Player2) ->
-    run_games(N, Player1, Player2, {0,0}).
+    run_games(N, Player1, Player2, {#sresult{self=Player1, opponent=Player2},
+                                    #sresult{self=Player2, opponent=Player1}}).
 
-run_games(0, _Player1, _Player2, Scores) ->
-    Scores;
-run_games(N, Player1, Player2, {Score1, Score2}) ->
-    {{_Player1Choice, Player1Points}, 
-     {_Player2Choice, Player2Points}} = play_one_game(Player1, Player2),
-    run_games(N-1, Player1, Player2, {Score1 + Player1Points,
-                                      Score2 + Player2Points}).
+run_games(0, _Player1, _Player2, SResults) ->
+    { P1, P2 } = SResults,
+    P1Choices = P1#sresult.choices,
+    P2Choices = P2#sresult.choices,
+    { P1#sresult{choices=lists:reverse(P1Choices)},
+      P2#sresult{choices=lists:reverse(P2Choices)}
+     };
+run_games(N, Player1, Player2, {SResult1, SResult2}) ->
+    {{Player1Choice, Player1Points}, 
+     {Player2Choice, Player2Points}} = play_one_game(Player1, Player2),
+    {TotP1Points, TotP2Points} = {SResult1#sresult.own_points, 
+                                  SResult2#sresult.own_points},
+    NewTotP1 = TotP1Points + Player1Points,
+    NewTotP2 = TotP2Points + Player2Points,
+    {P1Choices, P2Choices} = {SResult1#sresult.choices, 
+                              SResult2#sresult.choices},
+    run_games(N-1, 
+              Player1, 
+              Player2, 
+              {SResult1#sresult{
+                 own_points=NewTotP1,
+                 opponent_points=NewTotP2,
+                 choices = [ {Player1Choice,Player2Choice} | P1Choices ]},
+               SResult2#sresult{
+                 own_points=NewTotP2,
+                 opponent_points=NewTotP1,
+                 choices = [ {Player2Choice,Player1Choice} | P2Choices]}
+              }).
 
 
 %% Run a single game between two player processes, return a tuple that looks
