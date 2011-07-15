@@ -95,16 +95,18 @@ output_scores(SResultsByPlayer) ->
                             SResult,
                         io:format(" vs. ~s: ~p points (~p points)~n",
                                   [ Opp#player.name, OwnPts, OppPts ]),
-                        if
-                            length(Choices) < 50 ->
-                                io:format(" [~s]~n~n", 
-                                    [string:join(
-                                            lists:map(
-                                                fun format_choice/1, Choices),
-                                            ",")]);
-                            true ->
-                                ok
-                        end
+                        io:format(" [~s~s]~n~n", 
+                                  [string:join(
+                                     lists:map(
+                                       fun format_choice/1, lists:sublist(Choices,50)),
+                                     ","),
+                                   if
+                                       length(Choices) > 50 ->
+                                           ",...";
+                                       true ->
+                                           ""
+                                   end]),
+                        io:format(" Total CC/CD/DC/DD: ~p~n~n~n", [choice_stats(Choices)])
                 end,
                 SResults)
       end,
@@ -118,6 +120,26 @@ short_str(cooperate) ->
     "c";
 short_str(defect) ->
     "d".
+
+choice_stats(Choices) ->
+    choice_stats(Choices, {0,0,0,0}).
+
+choice_stats([], StatsTuple) ->
+    StatsTuple;
+choice_stats([H|T], {CC, CD, DC, DD}) ->
+    choice_stats(
+      T, case H of
+             {cooperate, cooperate} ->
+                 {CC+1, CD, DC, DD};
+             {cooperate, defect} ->
+                 {CC, CD+1, DC, DD};
+             {defect, cooperate} ->
+                 {CC, CD, DC+1, DD};
+             {defect, defect} ->
+                 {CC, CD, DC, DD+1}
+         end).
+        
+    
 
 all_pairs(Lst) ->
     all_pairs(Lst, []).
