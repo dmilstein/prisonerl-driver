@@ -22,14 +22,16 @@
                      
 
 create_players() ->
-    Players = [ {"pushover", pushover},
-                {"psycho", psycho},
-                {"darcy",    darcy} ],
-    lists:map(fun({Name, Module}) ->
-                      #player{name=Name,
-                              process=start_player(Module)}
-              end,
-              Players).
+    Players = [
+               {"darcy", darcy},      % Edmund,
+               {"drew",  drew},       % DH2
+               {"science", science},  % Owen
+               {"keith", keith},      % Keith
+               {"pcavs", pcavs}       % Paul C
+
+              ],
+    [ #player{name=Name, process=start_player(Module)}
+      || {Name, Module} <- Players ].
                                   
 %% Run a tournament among a list of { Name, Module } pairs, print the
 %% results out.
@@ -43,7 +45,7 @@ run_tournament() ->
               [ SR1, SR2 ]
       end,
       AllPairs)),
-    lists:map(fun stop_player/1, Players),
+    lists:foreach(fun stop_player/1, Players),
     SResultsByPlayer = collect_by_player(AllSResults),
     output_scores(SResultsByPlayer),
     ok.
@@ -68,17 +70,14 @@ collect_by_player(AllSResults) ->
 %% Take a list of { Player, [SResults] } tuples, generate output
 output_scores(SResultsByPlayer) ->
     WithTotalPoints = 
-        lists:map(fun({Player, SResults}) ->
-                          {Player, 
-                           SResults, 
-                           lists:foldl(
-                             fun(SResult, TotalPoints) ->
-                                     TotalPoints + SResult#sresult.own_points
-                             end,
-                             0,
-                             SResults)}
-                  end,
-                 SResultsByPlayer),
+        [ {Player, SResults, lists:foldl(
+                               fun(SResult, TotalPoints) ->
+                                       TotalPoints + SResult#sresult.own_points
+                               end,
+                               0,
+                               SResults)} 
+          || {Player, SResults} <- SResultsByPlayer ],
+
     Sorted = lists:reverse(lists:keysort(3, WithTotalPoints)),
     [{Winner, _SResults, Score} | _Rest] = Sorted,
     io:format("Winner:~n ~s (~p points)~n", [Winner#player.name, Score]),
@@ -147,7 +146,7 @@ all_pairs(Lst) ->
 all_pairs([], Lst) ->
     Lst;
 all_pairs([H|T], Lst) ->
-    SomePairs = lists:map(fun(Elt) -> {H, Elt} end, T),
+    SomePairs = [ {H, Elt} || Elt <- T ],
     all_pairs(T, lists:append(Lst, SomePairs)).
     
 %% Run N games between two players, returning a series result (sresult)
