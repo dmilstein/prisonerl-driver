@@ -34,7 +34,7 @@ create_players() ->
 %% Run a tournament among a list of { Name, Module } pairs, print the
 %% results out.
 run_tournament() ->
-    N = 10,
+    N = 1000,
     Players = create_players(),
     AllPairs = all_pairs(Players),
     AllSResults = lists:flatten(lists:map(
@@ -95,10 +95,16 @@ output_scores(SResultsByPlayer) ->
                             SResult,
                         io:format(" vs. ~s: ~p points (~p points)~n",
                                   [ Opp#player.name, OwnPts, OppPts ]),
-                        io:format(" [~s]~n~n", 
-                                  [string:join(
-                                     lists:map(fun format_choice/1, Choices),
-                                     ",")])
+                        if
+                            length(Choices) < 50 ->
+                                io:format(" [~s]~n~n", 
+                                    [string:join(
+                                            lists:map(
+                                                fun format_choice/1, Choices),
+                                            ",")]);
+                            true ->
+                                ok
+                        end
                 end,
                 SResults)
       end,
